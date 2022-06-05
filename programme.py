@@ -40,6 +40,8 @@ class WeatherStation:
         self.baudrate = baudrate
         self.ser = serial.Serial(self.serial_port)
         self.ser.baudrate = self.baudrate
+        self.rain_peak_intensity = None
+        self.hail_peak_intensity = None
         
     def connect(self):
         if self.ser.is_open == False:
@@ -96,12 +98,50 @@ class WeatherStation:
             if 'Sn=' in elt: self.wind_speed_min = float(elt[3:-1])
             if 'Sm=' in elt: self.wind_speed_avg = float(elt[3:-1])
             if 'Sx=' in elt: self.wind_speed_max = float(elt[3:-1])
-        return f"Dn={self.wind_direction_min}\n" \
-               f"Dm={self.wind_direction_avg}\n" \
-               f"Dx={self.wind_direction_max}\n" \
-               f"Sn={self.wind_speed_min}\n" \
-               f"Sm={self.wind_speed_avg}\n" \
-               f"Sx={self.wind_speed_max}\n"
+        return f"Dn={self.wind_direction_min} m/s\n" \
+               f"Dm={self.wind_direction_avg} m/s\n" \
+               f"Dx={self.wind_direction_max} m/s\n" \
+               f"Sn={self.wind_speed_min} °\n" \
+               f"Sm={self.wind_speed_avg} °\n" \
+               f"Sx={self.wind_speed_max} °\n"
+
+    def pressure_temperature_humidity_data_message(self):
+        self.ser.write(b'0R2\r\n')
+        answer = self.ser.read_until()
+        logging.info(answer)
+        message_as_string = str(answer).replace("\\r\\n'", '').split(',')
+        for elt in message_as_string:
+            if 'Ta=' in elt: self.air_temperature = float(elt[3:-1])
+            if 'Ua=' in elt: self.relative_humidity = float(elt[3:-1])
+            if 'Pa=' in elt: self.air_pressure = float(elt[3:-1])
+        return f"Ta={self.air_temperature} °C\n" \
+               f"Ua={self.relative_humidity} %RH\n" \
+               f"Pa={self.air_pressure} hPa\n"
+
+    def precipitation_data_message(self):
+        self.ser.write(b'0R3\r\n')
+        answer = self.ser.read_until()
+        logging.info(answer)
+        message_as_string = str(answer).replace("\\r\\n'", '').split(',')
+        for elt in message_as_string:
+            logging.info(elt)
+            if 'Rc=' in elt: self.rain_accumulation = float(elt[3:-1])
+            if 'Rd=' in elt: self.rain_duration = float(elt[3:-1])
+            if 'Ri=' in elt: self.rain_intensity = float(elt[3:-1])
+            if 'Hc=' in elt: self.hail_accumulation = float(elt[3:-1])
+            if 'Hd=' in elt: self.hail_duration = float(elt[3:-1])
+            if 'Hi=' in elt: self.hail_intensity = float(elt[3:-1])
+            if 'Rp=' in elt: self.rain_peak_intensity = float(elt[3:-1])
+            if 'Hp=' in elt: self.hail_peak_intensity = float(elt[3:-1])
+        return f"Rc={self.rain_accumulation} mm\n" \
+               f"Rd={self.rain_duration} s\n" \
+               f"Ri={self.rain_intensity} mm/h\n" \
+               f"Hc={self.hail_accumulation} hits/cm²\n"\
+               f"Hd={self.hail_duration} s\n" \
+               f"Hi={self.hail_intensity} hits/cm²h\n" \
+               f"Rp={self.rain_peak_intensity} mm/h\n" \
+               f"Hp={self.hail_peak_intensity} hits/cm²\n"
+
 
 
 
@@ -114,9 +154,15 @@ print("Connection...")
 print(weather_station.connect())
 print(weather_station.check_com_settings())
 print(weather_station)
-print("Testing wind")
+
+print("\nTesting wind")
 print(weather_station.wind_data_message())
 
+print("\nTesting pressure, temperature and humidity")
+print(weather_station.pressure_temperature_humidity_data_message())
+
+print("\nTesting precipitation")
+print(weather_station.precipitation_data_message())
 
 """ser.write(b'0XU\r\n')
 answer = ser.read_until()
