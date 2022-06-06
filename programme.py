@@ -42,6 +42,12 @@ class WeatherStation:
         self.ser.baudrate = self.baudrate
         self.rain_peak_intensity = None
         self.hail_peak_intensity = None
+        self.heating_temperature = None
+        self.heating_voltage = None
+        self.heating_state = None
+        self.supply_voltage = None
+        self.reference_voltage = None
+        self.information_field = None
         
     def connect(self):
         if self.ser.is_open == False:
@@ -124,7 +130,6 @@ class WeatherStation:
         logging.info(answer)
         message_as_string = str(answer).replace("\\r\\n'", '').split(',')
         for elt in message_as_string:
-            logging.info(elt)
             if 'Rc=' in elt: self.rain_accumulation = float(elt[3:-1])
             if 'Rd=' in elt: self.rain_duration = float(elt[3:-1])
             if 'Ri=' in elt: self.rain_intensity = float(elt[3:-1])
@@ -142,7 +147,58 @@ class WeatherStation:
                f"Rp={self.rain_peak_intensity} mm/h\n" \
                f"Hp={self.hail_peak_intensity} hits/cm²\n"
 
+    def supervisor_data_message(self):
+        self.ser.write(b'0R5\r\n')
+        answer = self.ser.read_until()
+        logging.info(answer)
+        message_as_string = str(answer).replace("\\r\\n'", '').split(',')
+        for elt in message_as_string:
+            logging.info(elt)
+            if 'Th=' in elt: self.heating_temperature = float(elt[3:-1])
+            if 'Vh=' in elt: self.heating_voltage = float(elt[3:-1])
+            if 'Heating=' in elt: self.heating_state = elt[-1]
+            if 'Vs=' in elt: self.supply_voltage = float(elt[3:-1])
+            if 'Vr=' in elt: self.reference_voltage = float(elt[3:-1])
+            if 'Id=' in elt: self.information_field = elt[3:]
+        return f"Th={self.heating_temperature} °C\n" \
+               f"Vh={self.heating_voltage} V\n" \
+               f"Heating={self.heating_state}\n" \
+               f"Vs={self.supply_voltage} V\n"\
+               f"Vr={self.reference_voltage} V\n" \
+               f"Id={self.information_field}\n"
 
+    def acknowledge_active_command(self):
+        self.ser.write(b'0\r\n')
+        answer = self.ser.read_until()
+        logging.info(f"Answer from the device after acknowledge command: {answer}")
+        test = answer==b'0\r\n'
+        logging.info(f"Result from acknowledge active command{test}")
+        return test
+
+    def precipitation_sensor_checking_the_settings(self):
+        self.ser.write(b'0RU\r\n')
+        answer = self.ser.read_until()
+        logging.info(f"Settings of the precipitation sensor: {answer}")
+        return answer
+
+    def precipitation_sensor_changing_the_settings(self, parameters):
+        message = b'0RU'
+        for attr, value in parameters.items():
+            if attr in ['R']:#, 'I', 'U', 'S', 'M', 'Z', 'X', 'Y']:
+                message += b',' + attr.encode() + b'=' + value
+        """self.ser.write(b'0RU\r\n')
+        answer = self.ser.read_until()
+        logging.info(f"Settings of the precipitation sensor: {answer}")
+        """
+        message += b'\r\n'
+        self.ser.write(message)
+        answer = self.ser.read_until()
+        check = answer == message
+        if check:
+            logging.info("Parameters changed successfully")
+        else:
+            logging.info("Error during parameters change")
+        return check
 
 
 
@@ -163,6 +219,28 @@ print(weather_station.pressure_temperature_humidity_data_message())
 
 print("\nTesting precipitation")
 print(weather_station.precipitation_data_message())
+
+print("Testing supervisor message")
+print(weather_station.supervisor_data_message())
+
+print("Testing acknowledge")
+weather_station.acknowledge_active_command()
+
+print("Check settings")
+weather_station.precipitation_sensor_checking_the_settings()
+
+print("Test change settings")
+parameters = {
+    'R': b'11111111&11111111',
+    'I': b'60',
+    'U': b'M',
+    'S': b'M',
+    'M': b'R',
+    'Z': b'M',
+    'X': b'10000',
+    'Y': b'100'
+}
+print(weather_station.precipitation_sensor_changing_the_settings(parameters))
 
 """ser.write(b'0XU\r\n')
 answer = ser.read_until()
