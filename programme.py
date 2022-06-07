@@ -40,15 +40,23 @@ class WeatherStation:
         self.baudrate = baudrate
         self.ser = serial.Serial(self.serial_port)
         self.ser.baudrate = self.baudrate
+
+        self.rain_accumulation = None
+        self.rain_duration = None
+        self.rain_intensity = None
+        self.hail_accumulation = None
+        self.hail_duration = None
+        self.hail_intensity = None
         self.rain_peak_intensity = None
         self.hail_peak_intensity = None
+
         self.heating_temperature = None
         self.heating_voltage = None
         self.heating_state = None
         self.supply_voltage = None
         self.reference_voltage = None
         self.information_field = None
-        
+
     def connect(self):
         if self.ser.is_open == False:
             self.ser.open()
@@ -58,7 +66,7 @@ class WeatherStation:
     def check_com_settings(self):
         self.ser.write(b'0XU\r\n')
         answer = self.ser.read_until()
-        #answer_example = b'0XU,A=0,M=P,T=0,C=2,I=0,B=19200,D=8,P=N,S=1,L=25,N=WXT520,V=2.14\r\n'
+        # answer_example = b'0XU,A=0,M=P,T=0,C=2,I=0,B=19200,D=8,P=N,S=1,L=25,N=WXT520,V=2.14\r\n'
         logging.info(answer)
         message_as_string = str(answer).replace("\\r\\n'", '').split(',')
         for elt in message_as_string:
@@ -141,7 +149,7 @@ class WeatherStation:
         return f"Rc={self.rain_accumulation} mm\n" \
                f"Rd={self.rain_duration} s\n" \
                f"Ri={self.rain_intensity} mm/h\n" \
-               f"Hc={self.hail_accumulation} hits/cm²\n"\
+               f"Hc={self.hail_accumulation} hits/cm²\n" \
                f"Hd={self.hail_duration} s\n" \
                f"Hi={self.hail_intensity} hits/cm²h\n" \
                f"Rp={self.rain_peak_intensity} mm/h\n" \
@@ -163,7 +171,7 @@ class WeatherStation:
         return f"Th={self.heating_temperature} °C\n" \
                f"Vh={self.heating_voltage} V\n" \
                f"Heating={self.heating_state}\n" \
-               f"Vs={self.supply_voltage} V\n"\
+               f"Vs={self.supply_voltage} V\n" \
                f"Vr={self.reference_voltage} V\n" \
                f"Id={self.information_field}\n"
 
@@ -171,7 +179,7 @@ class WeatherStation:
         self.ser.write(b'0\r\n')
         answer = self.ser.read_until()
         logging.info(f"Answer from the device after acknowledge command: {answer}")
-        test = answer==b'0\r\n'
+        test = answer == b'0\r\n'
         logging.info(f"Result from acknowledge active command{test}")
         return test
 
@@ -182,25 +190,68 @@ class WeatherStation:
         return answer
 
     def precipitation_sensor_changing_the_settings(self, parameters):
-        message = b'0RU'
+        count = 0
         for attr, value in parameters.items():
-            if attr in ['R']:#, 'I', 'U', 'S', 'M', 'Z', 'X', 'Y']:
+            message = b'0RU'
+            if attr in ['R', 'I', 'U', 'S', 'M', 'Z', 'X', 'Y']:
                 message += b',' + attr.encode() + b'=' + value
-        """self.ser.write(b'0RU\r\n')
-        answer = self.ser.read_until()
-        logging.info(f"Settings of the precipitation sensor: {answer}")
-        """
-        message += b'\r\n'
-        self.ser.write(message)
-        answer = self.ser.read_until()
-        check = answer == message
-        if check:
-            logging.info("Parameters changed successfully")
-        else:
-            logging.info("Error during parameters change")
-        return check
+                message += b'\r\n'
+                self.ser.write(message)
+                answer = self.ser.read_until()
+                message = message[0:15] + b'0' + message[15:-3] + b'\r\n' if attr == 'R' else message
+                check = answer == message
+                logging.info(f"message: {message}")
+                logging.info(f"answer : {answer}")
+                if check:
+                    logging.info(f"Parameter '{attr}' changed successfully")
+                    count += 1
+                else:
+                    logging.info(f"Error during change in parameter '{attr}'")
 
+        return count
 
+    def supervisor_message_changing_the_settings(self, parameters):
+        count = 0
+        for attr, value in parameters.items():
+            message = b'0SU'
+            if attr in ['R', 'I', 'S', 'H']:
+                message += b',' + attr.encode() + b'=' + value
+                message += b'\r\n'
+                self.ser.write(message)
+                answer = self.ser.read_until()
+                message = message[0:15] + b'0' + message[15:-3] + b'\r\n' if attr == 'R' else message
+                check = answer == message
+                logging.info(f"message: {message}")
+                logging.info(f"answer : {answer}")
+                if check:
+                    logging.info(f"Parameter '{attr}' changed successfully")
+                    count += 1
+                else:
+                    logging.info(f"Error during change in parameter '{attr}'")
+
+        return count
+
+    def pressure_temperature_humidity_changing_the_settings(self, parameters):
+        count = 0
+        for attr, value in parameters.items():
+            message = b'0TU'
+            if attr in ['R', 'I', 'P', 'T']:
+                message += b',' + attr.encode() + b'=' + value
+                message += b'\r\n'
+                self.ser.write(message)
+                answer = self.ser.read_until()
+                print(f"answer[16]: {answer}") # TODO
+                message = message[0:15] + bytes(answer[16]) + message[15:-3] + b'\r\n' if attr == 'R' else message
+                check = answer == message
+                logging.info(f"message: {message}")
+                logging.info(f"answer : {answer}")
+                if check:
+                    logging.info(f"Parameter '{attr}' changed successfully")
+                    count += 1
+                else:
+                    logging.info(f"Error during change in parameter '{attr}'")
+
+        return count
 
 
 
@@ -230,17 +281,35 @@ print("Check settings")
 weather_station.precipitation_sensor_checking_the_settings()
 
 print("Test change settings")
-parameters = {
-    'R': b'11111111&11111111',
-    'I': b'60',
-    'U': b'M',
-    'S': b'M',
-    'M': b'R',
-    'Z': b'M',
-    'X': b'10000',
-    'Y': b'100'
+parameters_precipitation = {
+    'R': b'11111111&11111111',  # Parameter selection
+    'I': b'60',  # Update interval: 1 ... 3600 seconds. This interval is valid only if the [M] field is = T
+    'U': b'M',  # Precipitation units
+    'S': b'M',  # Hail units
+    'M': b'R',  # Autosend mode: R = precipitation on/off, C = tipping bucket, T = time based
+    'Z': b'M',  # Counter reset: M = manual, A = automatic, L=limit, Y = immediate
+    'X': b'10000',  # Rain accumulation limit : 100...65535
+    'Y': b'10000' # Hail accumulation limit : 100...65535
 }
-print(weather_station.precipitation_sensor_changing_the_settings(parameters))
+print(weather_station.precipitation_sensor_changing_the_settings(parameters_precipitation))
+
+print("Test change settings on supervisor")
+parameters_supervisor = {
+    'R': b'11111111&11111111',  # Parameter selection
+    'I': b'60',  # Update interval:1-3600 seconds. When heating is enabled the update interval is forced to 15seconds.
+    'S': b'Y',  # Error messaging: Y = enabled, N = disabled
+    'H': b'Y',  # Heating control enable: Y = enabled, N = disabled
+}
+print(weather_station.supervisor_message_changing_the_settings(parameters_supervisor))
+
+print("Test change settings on TPH")
+parameters_tph = {
+    'R': b'11010000&11010000',  # Parameter selection
+    'I': b'60',  # Update interval: 1 ... 3600 seconds
+    'P': b'H',  # Pressure unit: H = hPa, P = Pascal, B = bar, M = mmHg, I = inHg
+    'T': b'C',  # Temperature unit: C = Celsius, F = Fahrenheit
+}
+print(weather_station.pressure_temperature_humidity_changing_the_settings(parameters_tph))
 
 """ser.write(b'0XU\r\n')
 answer = ser.read_until()
