@@ -240,8 +240,12 @@ class WeatherStation:
                 message += b'\r\n'
                 self.ser.write(message)
                 answer = self.ser.read_until()
-                print(f"answer[16]: {answer}") # TODO
-                message = message[0:15] + bytes(answer[16]) + message[15:-3] + b'\r\n' if attr == 'R' else message
+
+                message = message[0:15] + bytes(answer.decode()[15], 'utf8') + message[15:-3] + b'\r\n' if attr == 'R' else message
+                if attr == 'R':
+                    print(f"answer: {answer}") # TODO
+                    print(f"answer[15]: {answer[15]}")  # TODO
+                    print(f"message: {message}")
                 check = answer == message
                 logging.info(f"message: {message}")
                 logging.info(f"answer : {answer}")
