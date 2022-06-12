@@ -57,6 +57,10 @@ class WeatherStation:
         self.reference_voltage = None
         self.information_field = None
 
+        self.air_temperature = None
+        self.relative_humidity = None
+        self.air_pressure = None
+
     def connect(self):
         if self.ser.is_open == False:
             self.ser.open()
@@ -238,16 +242,11 @@ class WeatherStation:
             if attr in ['R', 'I', 'P', 'T']:
                 message += b',' + attr.encode() + b'=' + value
                 message += b'\r\n'
+                logging.info(f"message: {message}")
                 self.ser.write(message)
                 answer = self.ser.read_until()
-
                 message = message[0:15] + bytes(answer.decode()[15], 'utf8') + message[15:-3] + b'\r\n' if attr == 'R' else message
-                if attr == 'R':
-                    print(f"answer: {answer}") # TODO
-                    print(f"answer[15]: {answer[15]}")  # TODO
-                    print(f"message: {message}")
                 check = answer == message
-                logging.info(f"message: {message}")
                 logging.info(f"answer : {answer}")
                 if check:
                     logging.info(f"Parameter '{attr}' changed successfully")
@@ -308,7 +307,8 @@ print(weather_station.supervisor_message_changing_the_settings(parameters_superv
 
 print("Test change settings on TPH")
 parameters_tph = {
-    'R': b'11010000&11010000',  # Parameter selection
+    'R': b'00000000&00000000',  # Parameter selection
+    # 'R': b'00000000&00000000',  # Parameter selection
     'I': b'60',  # Update interval: 1 ... 3600 seconds
     'P': b'H',  # Pressure unit: H = hPa, P = Pascal, B = bar, M = mmHg, I = inHg
     'T': b'C',  # Temperature unit: C = Celsius, F = Fahrenheit
