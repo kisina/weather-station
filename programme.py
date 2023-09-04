@@ -53,7 +53,7 @@ print(weather_station.supervisor_message_changing_the_settings(parameters_superv
 
 print("Test change settings on TPH")
 parameters_tph = {
-    'R': b'00000000&00000000',  # Parameter selection
+    'R': b'11111000&11110000',  # Parameter selection
     # 'R': b'00000000&00000000',  # Parameter selection
     'I': b'60',  # Update interval: 1 ... 3600 seconds
     'P': b'H',  # Pressure unit: H = hPa, P = Pascal, B = bar, M = mmHg, I = inHg

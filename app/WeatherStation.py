@@ -30,6 +30,13 @@ class WeatherStation:
         4: 'RS-422',
     }
 
+    wind_speed_units_list: Dict[str, str] = {
+        'M': 'm/s',
+        'K': 'km/h',
+        'S': 'mph',
+        'N': 'knots',
+    }
+
     parity_list = dict(O='Odd', E='Even', N='None')
 
     def __init__(self, serial_port, baudrate):
@@ -186,10 +193,58 @@ class WeatherStation:
         return test
 
     def precipitation_sensor_checking_the_settings(self):
+        # TODO: adapt this part
         self.ser.write(b'0RU\r\n')
         answer = self.ser.read_until()
         logging.info(f"Settings of the precipitation sensor: {answer}")
         return answer
+
+    def wind_sensor_checking_the_settings(self):
+        self.ser.write(b'0WU\r\n')
+        answer = self.ser.read_until()
+        logging.info(f"Settings of the wind sensor: {answer}")
+        message_as_string = str(answer).replace("\\r\\n'", '').split(',')
+        for elt in message_as_string:
+            logging.info(elt)
+            if 'R=' in elt: self.wind_parameters = str(elt[2:])
+            if 'I=' in elt: self.wind_update_interval = int(elt[2:])
+            if 'A=' in elt: self.wind_averaging_time = int(elt[2:])
+            if 'G=' in elt: self.wind_speed_calculation_mode = int(elt[2:])
+            if 'U=' in elt: self.wind_speed_unit = WeatherStation.wind_speed_units_list[str(elt[2:])]
+            if 'D=' in elt: self.wind_direction_offset = int(elt[2:])
+            if 'N=' in elt: self.nmea_wind_formatter = str(elt[2:])
+            if 'F=' in elt: self.wind_sampling_rate = int(elt[2:])
+        return f"R={self.wind_parameters}\n" \
+               f"I={self.wind_update_interval} seconds\n" \
+               f"A={self.wind_averaging_time} seconds\n" \
+               f"G={self.wind_speed_calculation_mode}\n" \
+               f"U={self.wind_speed_unit}\n" \
+               f"D={self.wind_direction_offset} °\n" \
+               f"N={self.nmea_wind_formatter}\n" \
+               f"F={self.wind_sampling_rate} Hz\n"
+
+    def wind_sensor_changing_the_settings(self, parameters):
+        count = 0
+        for attr, value in parameters.items():
+            print(f"attr: {attr}: {value}")
+            message = b'0WU'
+            if attr in ['R', 'I', 'A', 'G', 'U', 'D', 'N', 'F']:
+                message += b',' + attr.encode() + b'=' + value
+                message += b'\r\n'
+                self.ser.write(message)
+                answer = self.ser.read_until()
+                message = message[0:15] + b'0' + message[15:-3] + b'\r\n' if attr == 'R' else message
+                check = answer == message
+                logging.info(f"message: {message}")
+                logging.info(f"answer : {answer}")
+                if check:
+                    logging.info(f"Parameter '{attr}' changed successfully")
+                    count += 1
+                else:
+                    logging.info(f"Error during change in parameter '{attr}'")
+
+        return count
+
 
     def precipitation_sensor_changing_the_settings(self, parameters):
         count = 0
